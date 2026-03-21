@@ -1,0 +1,28 @@
+{
+  "name": "@cognimail/backend-worker",
+  "version": "1.0.0",
+  "main": "dist/worker-user-direct.js",
+  "scripts": {
+    "dev": "tsx watch src/worker-user-direct.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/worker-user-direct.js",
+    "worker:user:direct": "node dist/worker-user-direct.js",
+    "start:worker:user:direct": "npm run build && node dist/worker-user-direct.js",
+    "package:worker-win": "powershell -ExecutionPolicy Bypass -File scripts/package-worker.ps1",
+    "package:worker-msi": "powershell -ExecutionPolicy Bypass -File scripts/build-msi.ps1"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "firebase": "^12.2.0",
+    "imapflow": "^1.0.188",
+    "mailparser": "^3.7.3",
+    "uuid": "^11.0.5"
+  },
+  "devDependencies": {
+    "@types/mailparser": "^3.4.6",
+    "@types/node": "^22.13.10",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2"
+  }
+}
+

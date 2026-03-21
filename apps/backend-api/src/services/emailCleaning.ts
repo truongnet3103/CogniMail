@@ -1,0 +1,132 @@
+const automatedKeywords = ["undeliverable", "delivery status notification", "out of office", "automatic reply"];
+const quoteMarkers = [
+  /^from:\s/i,
+  /^sent:\s/i,
+  /^to:\s/i,
+  /^subject:\s/i,
+  /^cc:\s/i,
+  /^on .+ wrote:\s*$/i,
+  /^-+\s*original message\s*-+$/i,
+  /^_{5,}$/,
+];
+
+const signatureMarkers = [
+  /^--$/,
+  /^best regards[,.! ]*$/i,
+  /^thanks(?:\s*(?:and|&)\s*best regards)?[,.! ]*$/i,
+  /^thanks[,.! ]*$/i,
+  /^regards[,.! ]*$/i,
+  /^kind regards[,.! ]*$/i,
+  /^yours sincerely[,.! ]*$/i,
+  /^sincerely[,.! ]*$/i,
+  /^sent from my /i,
+  /^have a great day[,.! ]*$/i,
+];
+
+const footerMarkers = [
+  /^\[cid:.*\]$/i,
+  /^https?:\/\/\S+$/i,
+  /^\*{2,}.+\*{2,}$/,
+];
+
+export const normalizeMultilineText = (value: string) =>
+  value
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\u0000/g, "")
+    .replace(/\t/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/[ ]{2,}/g, " ").trimEnd())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+export const flattenText = (value: string) =>
+  normalizeMultilineText(value).replace(/\n+/g, " ").replace(/\s{2,}/g, " ").trim();
+
+export const isAutomatedMail = (fromAddress: string, subject: string) => {
+  const lowerFrom = fromAddress.toLowerCase();
+  const lowerSubject = subject.toLowerCase();
+  if (
+    lowerFrom.includes("no-reply") ||
+    lowerFrom.includes("noreply") ||
+    lowerFrom.includes("do-not-reply") ||
+    lowerFrom.includes("mailer-daemon") ||
+    lowerFrom.includes("postmaster")
+  ) {
+    return true;
+  }
+  return automatedKeywords.some((item) => lowerSubject.includes(item));
+};
+
+const stripSignature = (lines: string[]) => {
+  if (lines.length <= 2) return lines;
+
+  let cutIndex = -1;
+  for (let index = 1; index < lines.length; index += 1) {
+    const trimmed = lines[index].trim();
+    if (!trimmed) continue;
+    if (footerMarkers.some((marker) => marker.test(trimmed))) {
+      cutIndex = index;
+      break;
+    }
+    if (!signatureMarkers.some((marker) => marker.test(trimmed))) continue;
+    if (index >= 2) {
+      cutIndex = index;
+      break;
+    }
+  }
+
+  return cutIndex >= 0 ? lines.slice(0, cutIndex) : lines;
+};
+
+export const extractMainBody = (rawText: string) => {
+  const normalized = rawText.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  const lines = normalized.split("\n").map((line) => line.trimEnd());
+  let quoteStart = lines.length;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+    if (!line) continue;
+    if (line.startsWith(">") || quoteMarkers.some((marker) => marker.test(line))) {
+      quoteStart = index;
+      break;
+    }
+  }
+
+  const bodyLines = lines
+    .slice(0, quoteStart)
+    .filter((line) => !line.trim().startsWith(">"))
+    .filter((line) => !footerMarkers.some((marker) => marker.test(line.trim())));
+
+  return normalizeMultilineText(stripSignature(bodyLines).join("\n"));
+};
+
+export const extractPrimaryText = (rawText: string) => {
+  const cleaned = extractMainBody(rawText);
+  const cleanedFlat = flattenText(cleaned);
+  if (cleanedFlat.length >= 25) {
+    return cleaned;
+  }
+
+  const normalized = normalizeMultilineText(rawText);
+  if (!normalized) {
+    return cleaned;
+  }
+
+  const fallback = normalizeMultilineText(
+    normalized
+      .split("\n")
+      .filter((line) => !line.trim().startsWith(">"))
+      .slice(0, 120)
+      .join("\n"),
+  );
+
+  if (!fallback) {
+    return cleaned || normalized;
+  }
+  if (!cleaned) {
+    return fallback;
+  }
+  return fallback.length > cleaned.length ? fallback : cleaned;
+};

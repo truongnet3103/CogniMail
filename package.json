@@ -1,0 +1,19 @@
+{
+  "name": "cognimail",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/frontend",
+    "apps/backend-api",
+    "apps/backend-worker",
+    "packages/shared"
+  ],
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "dev": "concurrently \"npm:dev --workspace @cognimail/backend-api\" \"npm:dev --workspace @cognimail/frontend\"",
+    "test": "npm run test --workspaces"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

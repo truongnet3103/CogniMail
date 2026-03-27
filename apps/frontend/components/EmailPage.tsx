@@ -46,6 +46,13 @@ export function EmailPage({
   const [aiPanelOpen, setAiPanelOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const normalizeIdentity = (value: string) => value.trim().toLowerCase();
+  const extractEmailIdentity = (value: string) => {
+    const trimmed = value.trim();
+    const match = trimmed.match(/<([^>]+)>/);
+    return normalizeIdentity(match?.[1] ?? trimmed);
+  };
+
   const displayEmails = useMemo(() => {
     const sourceFiltered = emails.filter((email) => (sourceMode === "ai" ? email.isAi : !email.isAi));
     const currentUserLower = currentUserEmail?.trim().toLowerCase() ?? "";
@@ -53,11 +60,17 @@ export function EmailPage({
       currentUserLower.length > 0 &&
       email.to.some((toItem) => toItem.address.trim().toLowerCase() === currentUserLower);
 
-    const selectedSenders = new Set(displayFilter.senders.map((item) => item.trim().toLowerCase()));
-    const groupSenders = new Set(
-      displayFilter.groups.flatMap((group) => (config.ai.tagMapping[group] ?? []).map((item) => item.trim().toLowerCase())),
+    const selectedSenders = new Set(displayFilter.senders.map((item) => extractEmailIdentity(item)).filter(Boolean));
+    const tagMappingByName = new Map(
+      Object.entries(config.ai.tagMapping ?? {}).map(([groupName, members]) => [
+        normalizeIdentity(groupName),
+        (members ?? []).map((item) => extractEmailIdentity(item)).filter(Boolean),
+      ]),
     );
-    const hasSenderFilter = selectedSenders.size > 0 || groupSenders.size > 0;
+    const groupMembers = displayFilter.groups.flatMap(
+      (groupName) => tagMappingByName.get(normalizeIdentity(groupName)) ?? [],
+    );
+    const hasSenderFilter = selectedSenders.size > 0 || groupMembers.length > 0;
     const directConversationKeys =
       displayFilter.directOnly && mode === "grouped" && currentUserLower
         ? new Set(
@@ -84,8 +97,20 @@ export function EmailPage({
       if (toDate !== undefined && emailTime > toDate) return false;
       if (!hasSenderFilter) return true;
 
-      const sender = email.from.address.trim().toLowerCase();
-      return selectedSenders.has(sender) || groupSenders.has(sender);
+      const sender = extractEmailIdentity(email.from.address);
+      const participants = [
+        sender,
+        ...(email.to ?? []).map((toItem) => extractEmailIdentity(toItem.address)),
+        ...(email.cc ?? []).map((ccItem) => extractEmailIdentity(ccItem.address)),
+      ];
+      const bySender = selectedSenders.has(sender);
+      const byGroup = groupMembers.some(
+        (member) =>
+          participants.some(
+            (participant) => participant === member || participant.includes(member),
+          ),
+      );
+      return bySender || byGroup;
     });
   }, [emails, sourceMode, displayFilter, config.ai.tagMapping, currentUserEmail, mode]);
   const lastTwoDaysEmails = useMemo(() => {
